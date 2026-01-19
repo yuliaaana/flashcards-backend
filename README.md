@@ -17,6 +17,7 @@
 - **База даних**: [PostgreSQL](https://www.postgresql.org/)
 
 
+
 ## 📌 [Посилання на frontend](https://github.com/yuliaaana/coursework-frontend)
 
 
