@@ -30,6 +30,7 @@ class Deck(db.Model):
     creator = db.Column(db.String(255), nullable=False)  
     terms = db.Column(db.Integer, default=0)  
     is_public = db.Column(db.Boolean, default=False)  # <-- додано
+    latest_test_result = db.Column(db.Float, nullable=True)  # Store percentage result as float
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     user = db.relationship('User', backref=db.backref('decks', lazy=True))
     folder = db.relationship('Folder', backref=db.backref('decks', lazy=True))
@@ -42,6 +43,7 @@ class Deck(db.Model):
             "creator_id": self.user.id,    
             "terms": self.terms,
             "is_public": self.is_public,
+            "latest_test_result": self.latest_test_result,
             "created_at": self.created_at.strftime("%d.%m.%Y")
         }
 
