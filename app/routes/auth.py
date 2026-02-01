@@ -32,6 +32,7 @@ def login():
             "message": "Login successful",
             "redirect_url": "/dashboard",
             "user_id": user.id,
+            "role": user.role,
             "folders": folder_list,
             "decks": deck_list
         }), 200
