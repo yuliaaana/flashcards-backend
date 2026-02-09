@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
-from app import db
-from app.models import StudyGroup, StudyGroupMembership, StudyGroupDeck, StudyGroupFolder, User, Deck, Folder, TestAssignment
+from .. import db
+from ..models import StudyGroup, StudyGroupMembership, StudyGroupDeck, StudyGroupFolder, User, Deck, Folder, Assignment, AssignmentDeck, AssignmentMode, AssignmentResult
 
 bp = Blueprint('groups', __name__, url_prefix='/api')
 
@@ -239,20 +239,18 @@ from datetime import datetime
 def create_assignment(group_id):
     data = request.get_json()
     teacher_id = data.get('teacher_id')
-    test_id = data.get('test_id')
-    due_date_str = data.get('due_date')  # expected ISO format, e.g. "2026-03-01T23:59:00"
-    student_id = data.get('student_id')  # optional, assign to individual student
+    title = data.get('title')
+    description = data.get('description')
+    due_date_str = data.get('due_date')  # ISO format, e.g. "2026-03-01T23:59:00"
+    deck_ids = data.get('deck_ids', [])
+    modes = data.get('modes', [])  # e.g. ["flashcards", "match", "test"]
 
-    if not teacher_id or not test_id:
-        return jsonify({"error": "teacher_id and test_id required"}), 400
+    if not teacher_id or not title:
+        return jsonify({"error": "teacher_id and title required"}), 400
 
     group = StudyGroup.query.get_or_404(group_id)
     if group.teacher_id != teacher_id:
         return jsonify({"error": "Only the group's teacher can create assignments"}), 403
-
-    deck = Deck.query.get(test_id)
-    if not deck:
-        return jsonify({"error": "Deck/test not found"}), 404
 
     due_date = None
     if due_date_str:
@@ -261,37 +259,143 @@ def create_assignment(group_id):
         except ValueError:
             return jsonify({"error": "Invalid due_date format, use ISO format"}), 400
 
-    assignment = TestAssignment(
-        test_id=test_id,
+    assignment = Assignment(
         group_id=group_id,
-        student_id=student_id,
-        assigned_by=teacher_id,
+        title=title,
+        description=description,
+        created_by=teacher_id,
         due_date=due_date
     )
     db.session.add(assignment)
+    db.session.flush()  # get assignment.id before committing
+
+    for deck_id in deck_ids:
+        deck = Deck.query.get(deck_id)
+        if not deck:
+            db.session.rollback()
+            return jsonify({"error": f"Deck {deck_id} not found"}), 404
+        db.session.add(AssignmentDeck(assignment_id=assignment.id, deck_id=deck_id))
+
+    for mode in modes:
+        db.session.add(AssignmentMode(assignment_id=assignment.id, mode=mode))
+
     db.session.commit()
     return jsonify({"message": "Assignment created", "assignment_id": assignment.id}), 201
 
 @bp.route('/groups/<int:group_id>/assignments', methods=['GET'])
 def get_group_assignments(group_id):
     StudyGroup.query.get_or_404(group_id)
-    now = datetime.utcnow()
-    # Active = no due_date (open-ended) or due_date in the future
-    assignments = TestAssignment.query.filter(
-        TestAssignment.group_id == group_id,
-        db.or_(TestAssignment.due_date == None, TestAssignment.due_date >= now)
-    ).all()
+    assignments = Assignment.query.filter_by(group_id=group_id).order_by(Assignment.created_at.desc()).all()
     result = []
     for a in assignments:
-        deck = Deck.query.get(a.test_id)
         result.append({
             "id": a.id,
-            "test_id": a.test_id,
-            "test_name": deck.name if deck else None,
+            "title": a.title,
+            "description": a.description,
             "group_id": a.group_id,
-            "student_id": a.student_id,
-            "assigned_by": a.assigned_by,
-            "assigned_at": a.assigned_at.isoformat() if a.assigned_at else None,
-            "due_date": a.due_date.isoformat() if a.due_date else None
+            "created_by": a.created_by,
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+            "due_date": a.due_date.isoformat() if a.due_date else None,
+            "deck_ids": [ad.deck_id for ad in a.decks],
+            "modes": [am.mode for am in a.modes]
         })
     return jsonify(result)
+
+@bp.route('/assignments/<int:assignment_id>', methods=['GET'])
+def get_assignment(assignment_id):
+    a = Assignment.query.get_or_404(assignment_id)
+    decks_info = []
+    for ad in a.decks:
+        deck = Deck.query.get(ad.deck_id)
+        if deck:
+            decks_info.append(deck.to_dict())
+    return jsonify({
+        "id": a.id,
+        "title": a.title,
+        "description": a.description,
+        "group_id": a.group_id,
+        "created_by": a.created_by,
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+        "due_date": a.due_date.isoformat() if a.due_date else None,
+        "decks": decks_info,
+        "modes": [am.mode for am in a.modes]
+    })
+
+@bp.route('/assignments/<int:assignment_id>', methods=['DELETE'])
+def delete_assignment(assignment_id):
+    data = request.get_json()
+    teacher_id = data.get('teacher_id')
+    if not teacher_id:
+        return jsonify({"error": "teacher_id required"}), 400
+    a = Assignment.query.get_or_404(assignment_id)
+    group = StudyGroup.query.get(a.group_id)
+    if not group or group.teacher_id != teacher_id:
+        return jsonify({"error": "Only the group's teacher can delete assignments"}), 403
+    db.session.delete(a)
+    db.session.commit()
+    return jsonify({"message": "Assignment deleted"}), 200
+
+@bp.route('/assignments/<int:assignment_id>/results', methods=['POST'])
+def submit_assignment_result(assignment_id):
+    data = request.get_json()
+    user_id = data.get('user_id')
+    deck_id = data.get('deck_id')
+    mode = data.get('mode')
+    score = data.get('score')
+    total = data.get('total')
+
+    if not all([user_id, deck_id, mode, score is not None, total is not None]):
+        return jsonify({"error": "user_id, deck_id, mode, score, and total required"}), 400
+
+    Assignment.query.get_or_404(assignment_id)
+
+    result = AssignmentResult(
+        assignment_id=assignment_id,
+        user_id=user_id,
+        deck_id=deck_id,
+        mode=mode,
+        score=score,
+        total=total
+    )
+    db.session.add(result)
+    db.session.commit()
+    return jsonify({"message": "Result submitted", "result_id": result.id}), 201
+
+@bp.route('/assignments/<int:assignment_id>/results', methods=['GET'])
+def get_assignment_results(assignment_id):
+    Assignment.query.get_or_404(assignment_id)
+    results = AssignmentResult.query.filter_by(assignment_id=assignment_id).order_by(AssignmentResult.completed_at.desc()).all()
+    output = []
+    for r in results:
+        user = User.query.get(r.user_id)
+        deck = Deck.query.get(r.deck_id)
+        output.append({
+            "id": r.id,
+            "user_id": r.user_id,
+            "username": user.username if user else None,
+            "deck_id": r.deck_id,
+            "deck_name": deck.name if deck else None,
+            "mode": r.mode,
+            "score": r.score,
+            "total": r.total,
+            "completed_at": r.completed_at.isoformat() if r.completed_at else None
+        })
+    return jsonify(output)
+
+@bp.route('/assignments/<int:assignment_id>/results/<int:user_id>', methods=['GET'])
+def get_student_assignment_results(assignment_id, user_id):
+    Assignment.query.get_or_404(assignment_id)
+    results = AssignmentResult.query.filter_by(assignment_id=assignment_id, user_id=user_id).order_by(AssignmentResult.completed_at.desc()).all()
+    output = []
+    for r in results:
+        deck = Deck.query.get(r.deck_id)
+        output.append({
+            "id": r.id,
+            "deck_id": r.deck_id,
+            "deck_name": deck.name if deck else None,
+            "mode": r.mode,
+            "score": r.score,
+            "total": r.total,
+            "completed_at": r.completed_at.isoformat() if r.completed_at else None
+        })
+    return jsonify(output)

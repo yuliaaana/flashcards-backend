@@ -118,25 +118,40 @@ class StudyGroupFolder(db.Model):
     folder = db.relationship('Folder', backref=db.backref('group_links', lazy=True))
     adder = db.relationship('User', foreign_keys=[added_by])
 
-class TestAssignment(db.Model):
+class Assignment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    test_id = db.Column(db.Integer, db.ForeignKey('deck.id'), nullable=False)  # Assuming Deck is used as Test
-    group_id = db.Column(db.Integer, db.ForeignKey('study_group.id'), nullable=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
-    assigned_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    assigned_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    group_id = db.Column(db.Integer, db.ForeignKey('study_group.id'), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     due_date = db.Column(db.DateTime, nullable=True)
-    test = db.relationship('Deck', backref=db.backref('assignments', lazy=True))
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     group = db.relationship('StudyGroup', backref=db.backref('assignments', lazy=True))
-    student = db.relationship('User', foreign_keys=[student_id], backref='test_assignments')
-    assigner = db.relationship('User', foreign_keys=[assigned_by], backref='assigned_tests')
+    creator = db.relationship('User', foreign_keys=[created_by], backref='created_assignments')
+    decks = db.relationship('AssignmentDeck', backref='assignment', lazy=True, cascade='all, delete-orphan')
+    modes = db.relationship('AssignmentMode', backref='assignment', lazy=True, cascade='all, delete-orphan')
+    results = db.relationship('AssignmentResult', backref='assignment', lazy=True, cascade='all, delete-orphan')
 
-class TestResult(db.Model):
+class AssignmentDeck(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    assignment_id = db.Column(db.Integer, db.ForeignKey('test_assignment.id'), nullable=False)
-    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    assignment_id = db.Column(db.Integer, db.ForeignKey('assignment.id'), nullable=False)
+    deck_id = db.Column(db.Integer, db.ForeignKey('deck.id'), nullable=False)
+    deck = db.relationship('Deck')
+
+class AssignmentMode(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    assignment_id = db.Column(db.Integer, db.ForeignKey('assignment.id'), nullable=False)
+    mode = db.Column(db.String(50), nullable=False)  # 'flashcards', 'match', 'written', 'test'
+
+class AssignmentResult(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    assignment_id = db.Column(db.Integer, db.ForeignKey('assignment.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    deck_id = db.Column(db.Integer, db.ForeignKey('deck.id'), nullable=False)
+    mode = db.Column(db.String(50), nullable=False)
     score = db.Column(db.Float, nullable=False)
-    submitted_at = db.Column(db.DateTime, default=db.func.current_timestamp())
-    assignment = db.relationship('TestAssignment', backref=db.backref('results', lazy=True))
-    student = db.relationship('User', backref=db.backref('test_results', lazy=True))
+    total = db.Column(db.Float, nullable=False)
+    completed_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    user = db.relationship('User', backref=db.backref('assignment_results', lazy=True))
+    deck = db.relationship('Deck')
     
