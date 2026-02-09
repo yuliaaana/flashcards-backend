@@ -40,7 +40,8 @@ def get_user_data(user_id):
         "id": user.id,
         "username": user.username,
         "email": user.email,
-        "avatar": avatar_base64
+        "avatar": avatar_base64,
+        "role": user.role
     }
 
     return jsonify({

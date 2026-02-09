@@ -6,6 +6,7 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     avatar = db.Column(db.LargeBinary, nullable=True)
+    role = db.Column(db.String(20), nullable=False, default='student')  # 'student' or 'teacher'
 
 class Folder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -64,6 +65,7 @@ class Flashcard(db.Model):
     
     deck = db.relationship('Deck', backref=db.backref('flashcards', lazy=True))
     
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -78,4 +80,43 @@ class Flashcard(db.Model):
             "confidence_level": self.confidence_level,
             "next_review": self.next_review  
         }
+
+
+# --- Study Groups and Test Assignment Models ---
+class StudyGroup(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    teacher = db.relationship('User', foreign_keys=[teacher_id], backref='teaching_groups')
+
+class StudyGroupMembership(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey('study_group.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    joined_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    group = db.relationship('StudyGroup', backref=db.backref('memberships', lazy=True))
+    user = db.relationship('User', backref=db.backref('group_memberships', lazy=True))
+
+class TestAssignment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    test_id = db.Column(db.Integer, db.ForeignKey('deck.id'), nullable=False)  # Assuming Deck is used as Test
+    group_id = db.Column(db.Integer, db.ForeignKey('study_group.id'), nullable=True)
+    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    assigned_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    assigned_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    due_date = db.Column(db.DateTime, nullable=True)
+    test = db.relationship('Deck', backref=db.backref('assignments', lazy=True))
+    group = db.relationship('StudyGroup', backref=db.backref('assignments', lazy=True))
+    student = db.relationship('User', foreign_keys=[student_id], backref='test_assignments')
+    assigner = db.relationship('User', foreign_keys=[assigned_by], backref='assigned_tests')
+
+class TestResult(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    assignment_id = db.Column(db.Integer, db.ForeignKey('test_assignment.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    score = db.Column(db.Float, nullable=False)
+    submitted_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    assignment = db.relationship('TestAssignment', backref=db.backref('results', lazy=True))
+    student = db.relationship('User', backref=db.backref('test_results', lazy=True))
     
