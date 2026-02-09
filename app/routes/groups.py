@@ -77,3 +77,39 @@ def get_group(group_id):
         "teacher_id": group.teacher_id,
         "members": members
     })
+
+# Endpoint for teachers to add students by nickname to a study group
+@bp.route('/groups/<int:group_id>/add_students', methods=['POST'])
+def add_students_to_group(group_id):
+    data = request.get_json()
+    teacher_id = data.get('teacher_id')
+    usernames = data.get('usernames', [])
+    if not teacher_id or not usernames:
+        return jsonify({"error": "teacher_id and usernames required"}), 400
+    group = StudyGroup.query.get_or_404(group_id)
+    if group.teacher_id != teacher_id:
+        return jsonify({"error": "Only the group's teacher can add students"}), 403
+    added = []
+    added_emails = []
+    not_found = []
+    already_member = []
+    for username in usernames:
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            not_found.append(username)
+            continue
+        membership = StudyGroupMembership.query.filter_by(group_id=group_id, user_id=user.id).first()
+        if membership:
+            already_member.append(username)
+            continue
+        membership = StudyGroupMembership(group_id=group_id, user_id=user.id)
+        db.session.add(membership)
+        added.append(username)
+        added_emails.append(user.email)
+    db.session.commit()
+    return jsonify({
+        "added": added,
+        "added_emails": added_emails,
+        "not_found": not_found,
+        "already_member": already_member
+    }), 200
