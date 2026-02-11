@@ -28,6 +28,24 @@ CREATE TABLE test_assignment (
     due_date TIMESTAMP
 );
 
+-- StudyGroupDeck table
+CREATE TABLE study_group_deck (
+    id SERIAL PRIMARY KEY,
+    group_id INTEGER NOT NULL REFERENCES study_group(id),
+    deck_id INTEGER NOT NULL REFERENCES deck(id),
+    added_by INTEGER NOT NULL REFERENCES "user"(id),
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- StudyGroupFolder table
+CREATE TABLE study_group_folder (
+    id SERIAL PRIMARY KEY,
+    group_id INTEGER NOT NULL REFERENCES study_group(id),
+    folder_id INTEGER NOT NULL REFERENCES folder(id),
+    added_by INTEGER NOT NULL REFERENCES "user"(id),
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- TestResult table
 CREATE TABLE test_result (
     id SERIAL PRIMARY KEY,

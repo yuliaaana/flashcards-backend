@@ -98,6 +98,26 @@ class StudyGroupMembership(db.Model):
     group = db.relationship('StudyGroup', backref=db.backref('memberships', lazy=True))
     user = db.relationship('User', backref=db.backref('group_memberships', lazy=True))
 
+class StudyGroupDeck(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey('study_group.id'), nullable=False)
+    deck_id = db.Column(db.Integer, db.ForeignKey('deck.id'), nullable=False)
+    added_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    added_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    group = db.relationship('StudyGroup', backref=db.backref('group_decks', lazy=True))
+    deck = db.relationship('Deck', backref=db.backref('group_links', lazy=True))
+    adder = db.relationship('User', foreign_keys=[added_by])
+
+class StudyGroupFolder(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey('study_group.id'), nullable=False)
+    folder_id = db.Column(db.Integer, db.ForeignKey('folder.id'), nullable=False)
+    added_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    added_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    group = db.relationship('StudyGroup', backref=db.backref('group_folders', lazy=True))
+    folder = db.relationship('Folder', backref=db.backref('group_links', lazy=True))
+    adder = db.relationship('User', foreign_keys=[added_by])
+
 class TestAssignment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     test_id = db.Column(db.Integer, db.ForeignKey('deck.id'), nullable=False)  # Assuming Deck is used as Test
