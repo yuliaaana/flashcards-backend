@@ -23,6 +23,29 @@ def submit_test(assignment_id):
     db.session.commit()
     return jsonify({'message': 'Result submitted', 'result_id': result.id}), 201
 
+@tests_bp.route('/assignments/<int:assignment_id>/leaderboard', methods=['GET'])
+def assignment_leaderboard(assignment_id):
+    Assignment.query.get_or_404(assignment_id)
+    results = db.session.query(
+        AssignmentResult.user_id,
+        db.func.sum(AssignmentResult.score).label('total_score'),
+        db.func.sum(AssignmentResult.total).label('total_possible'),
+        (db.func.sum(AssignmentResult.score) * 100.0 / db.func.sum(AssignmentResult.total)).label('percentage')
+    )\
+        .filter(AssignmentResult.assignment_id == assignment_id)\
+        .group_by(AssignmentResult.user_id)\
+        .order_by(db.desc('percentage')).all()
+    leaderboard = []
+    for r in results:
+        user = User.query.get(r.user_id)
+        avg_score = (r.total_score * 100.0 / r.total_possible) if r.total_possible else 0
+        leaderboard.append({
+            'user_id': r.user_id,
+            'username': user.username if user else None,
+            'avg_score': round(avg_score, 2)
+        })
+    return jsonify(leaderboard)
+
 @tests_bp.route('/groups/<int:group_id>/leaderboard', methods=['GET'])
 def group_leaderboard(group_id):
     group = StudyGroup.query.get_or_404(group_id)
