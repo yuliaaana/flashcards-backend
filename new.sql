@@ -17,15 +17,41 @@ CREATE TABLE study_group_membership (
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- TestAssignment table
-CREATE TABLE test_assignment (
+-- Assignment table
+CREATE TABLE assignment (
     id SERIAL PRIMARY KEY,
-    test_id INTEGER NOT NULL REFERENCES deck(id),
-    group_id INTEGER REFERENCES study_group(id),
-    student_id INTEGER REFERENCES "user"(id),
-    assigned_by INTEGER NOT NULL REFERENCES "user"(id),
-    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    due_date TIMESTAMP
+    group_id INTEGER NOT NULL REFERENCES study_group(id),
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_by INTEGER NOT NULL REFERENCES "user"(id),
+    due_date TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- AssignmentDeck table
+CREATE TABLE assignment_deck (
+    id SERIAL PRIMARY KEY,
+    assignment_id INTEGER NOT NULL REFERENCES assignment(id) ON DELETE CASCADE,
+    deck_id INTEGER NOT NULL REFERENCES deck(id)
+);
+
+-- AssignmentMode table
+CREATE TABLE assignment_mode (
+    id SERIAL PRIMARY KEY,
+    assignment_id INTEGER NOT NULL REFERENCES assignment(id) ON DELETE CASCADE,
+    mode VARCHAR(50) NOT NULL
+);
+
+-- AssignmentResult table
+CREATE TABLE assignment_result (
+    id SERIAL PRIMARY KEY,
+    assignment_id INTEGER NOT NULL REFERENCES assignment(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES "user"(id),
+    deck_id INTEGER NOT NULL REFERENCES deck(id),
+    mode VARCHAR(50) NOT NULL,
+    score FLOAT NOT NULL,
+    total FLOAT NOT NULL,
+    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- StudyGroupDeck table
@@ -46,11 +72,4 @@ CREATE TABLE study_group_folder (
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- TestResult table
-CREATE TABLE test_result (
-    id SERIAL PRIMARY KEY,
-    assignment_id INTEGER NOT NULL REFERENCES test_assignment(id),
-    student_id INTEGER NOT NULL REFERENCES "user"(id),
-    score FLOAT NOT NULL,
-    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- (Old test_result table removed, replaced by assignment_result above)
