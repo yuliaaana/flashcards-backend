@@ -1,15 +1,15 @@
 from flask import Blueprint, request, jsonify
 from ..models import db, Assignment, AssignmentResult, Deck, StudyGroup, User
-from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 
-tests_bp = Blueprint('tests', __name__)
+tests_bp = Blueprint('tests', __name__, url_prefix='/api')
 
 @tests_bp.route('/assignments/<int:assignment_id>/submit', methods=['POST'])
-@jwt_required()
 def submit_test(assignment_id):
-    user_id = get_jwt_identity()
     data = request.json
+    user_id = data.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'user_id required'}), 400
     Assignment.query.get_or_404(assignment_id)
     result = AssignmentResult(
         assignment_id=assignment_id,
@@ -24,7 +24,6 @@ def submit_test(assignment_id):
     return jsonify({'message': 'Result submitted', 'result_id': result.id}), 201
 
 @tests_bp.route('/groups/<int:group_id>/leaderboard', methods=['GET'])
-@jwt_required()
 def group_leaderboard(group_id):
     group = StudyGroup.query.get_or_404(group_id)
     results = db.session.query(

@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from .. import db
 from ..models import StudyGroup, StudyGroupMembership, StudyGroupDeck, StudyGroupFolder, User, Deck, Folder, Assignment, AssignmentDeck, AssignmentMode, AssignmentResult
 
@@ -238,6 +238,8 @@ from datetime import datetime
 @bp.route('/groups/<int:group_id>/assignments', methods=['POST'])
 def create_assignment(group_id):
     data = request.get_json()
+    print(data)
+    current_app.logger.info(f"Assignment data: {data}")
     teacher_id = data.get('teacher_id')
     title = data.get('title')
     description = data.get('description')
