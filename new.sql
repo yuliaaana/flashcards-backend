@@ -25,9 +25,10 @@ CREATE TABLE assignment (
     description TEXT,
     created_by INTEGER NOT NULL REFERENCES "user"(id),
     due_date TIMESTAMP,
+    one_time_only BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
+ALTER TABLE assignment ADD COLUMN one_time_only BOOLEAN DEFAULT FALSE;
 -- AssignmentDeck table
 CREATE TABLE assignment_deck (
     id SERIAL PRIMARY KEY,

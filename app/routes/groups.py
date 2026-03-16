@@ -244,6 +244,7 @@ def create_assignment(group_id):
     title = data.get('title')
     description = data.get('description')
     due_date_str = data.get('due_date')  # ISO format, e.g. "2026-03-01T23:59:00"
+    one_time_only = data.get('one_time_only', False)  # Default to False
     deck_ids = data.get('deck_ids', [])
     modes = data.get('modes', [])  # e.g. ["flashcards", "match", "test"]
 
@@ -266,7 +267,8 @@ def create_assignment(group_id):
         title=title,
         description=description,
         created_by=teacher_id,
-        due_date=due_date
+        due_date=due_date,
+        one_time_only=one_time_only
     )
     db.session.add(assignment)
     db.session.flush()  # get assignment.id before committing
@@ -298,6 +300,7 @@ def get_group_assignments(group_id):
             "created_by": a.created_by,
             "created_at": a.created_at.isoformat() if a.created_at else None,
             "due_date": a.due_date.isoformat() if a.due_date else None,
+            "one_time_only": a.one_time_only,
             "deck_ids": [ad.deck_id for ad in a.decks],
             "modes": [am.mode for am in a.modes]
         })
@@ -319,6 +322,7 @@ def get_assignment(assignment_id):
         "created_by": a.created_by,
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "due_date": a.due_date.isoformat() if a.due_date else None,
+        "one_time_only": a.one_time_only,
         "decks": decks_info,
         "modes": [am.mode for am in a.modes]
     })
@@ -349,7 +353,17 @@ def submit_assignment_result(assignment_id):
     if not all([user_id, deck_id, mode, score is not None, total is not None]):
         return jsonify({"error": "user_id, deck_id, mode, score, and total required"}), 400
 
-    Assignment.query.get_or_404(assignment_id)
+    assignment = Assignment.query.get_or_404(assignment_id)
+
+    # Check if one_time_only and user has already submitted for this assignment and deck
+    if assignment.one_time_only:
+        existing_result = AssignmentResult.query.filter_by(
+            assignment_id=assignment_id,
+            user_id=user_id,
+            deck_id=deck_id
+        ).first()
+        if existing_result:
+            return jsonify({"error": "You can only submit this assignment once per deck"}), 400
 
     result = AssignmentResult(
         assignment_id=assignment_id,
