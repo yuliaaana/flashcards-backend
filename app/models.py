@@ -125,6 +125,7 @@ class Assignment(db.Model):
     description = db.Column(db.Text, nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     due_date = db.Column(db.DateTime, nullable=True)
+    one_time_only = db.Column(db.Boolean, default=False)  # If True, students can only take the test once
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     group = db.relationship('StudyGroup', backref=db.backref('assignments', lazy=True))
     creator = db.relationship('User', foreign_keys=[created_by], backref='created_assignments')

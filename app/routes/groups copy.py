@@ -95,6 +95,7 @@ def get_user_groups(user_id):
         })
     return jsonify(result)
 
+# Endpoint for teachers to add students by nickname to a study group
 @bp.route('/groups/<int:group_id>/add_students', methods=['POST'])
 def add_students_to_group(group_id):
     data = request.get_json()
@@ -129,6 +130,8 @@ def add_students_to_group(group_id):
         "not_found": not_found,
         "already_member": already_member
     }), 200
+
+# --- Attach / detach decks ---
 
 @bp.route('/groups/<int:group_id>/decks', methods=['GET'])
 def get_group_decks(group_id):
@@ -178,6 +181,8 @@ def remove_deck_from_group(group_id, deck_id):
     db.session.commit()
     return jsonify({"message": "Deck removed from group"}), 200
 
+# --- Attach / detach folders ---
+
 @bp.route('/groups/<int:group_id>/folders', methods=['GET'])
 def get_group_folders(group_id):
     StudyGroup.query.get_or_404(group_id)
@@ -226,6 +231,8 @@ def remove_folder_from_group(group_id, folder_id):
     db.session.commit()
     return jsonify({"message": "Folder removed from group"}), 200
 
+# --- Assignments ---
+
 from datetime import datetime
 
 @bp.route('/groups/<int:group_id>/assignments', methods=['POST'])
@@ -236,10 +243,10 @@ def create_assignment(group_id):
     teacher_id = data.get('teacher_id')
     title = data.get('title')
     description = data.get('description')
-    due_date_str = data.get('due_date')
-    one_time_only = data.get('one_time_only', False)
+    due_date_str = data.get('due_date')  # ISO format, e.g. "2026-03-01T23:59:00"
+    one_time_only = data.get('one_time_only', False)  # Default to False
     deck_ids = data.get('deck_ids', [])
-    modes = data.get('modes', [])
+    modes = data.get('modes', [])  # e.g. ["flashcards", "match", "test"]
 
     if not teacher_id or not title:
         return jsonify({"error": "teacher_id and title required"}), 400
@@ -264,7 +271,7 @@ def create_assignment(group_id):
         one_time_only=one_time_only
     )
     db.session.add(assignment)
-    db.session.flush()
+    db.session.flush()  # get assignment.id before committing
 
     for deck_id in deck_ids:
         deck = Deck.query.get(deck_id)
@@ -307,21 +314,6 @@ def get_assignment(assignment_id):
         deck = Deck.query.get(ad.deck_id)
         if deck:
             decks_info.append(deck.to_dict())
-    
-    # Get group members
-    group = StudyGroup.query.get(a.group_id)
-    students = []
-    if group:
-        memberships = StudyGroupMembership.query.filter_by(group_id=a.group_id).all()
-        students = [
-            {
-                'id': m.user_id,
-                'username': User.query.get(m.user_id).username if User.query.get(m.user_id) else f"User {m.user_id}",
-                'email': User.query.get(m.user_id).email if User.query.get(m.user_id) else None
-            }
-            for m in memberships
-        ]
-    
     return jsonify({
         "id": a.id,
         "title": a.title,
@@ -332,8 +324,7 @@ def get_assignment(assignment_id):
         "due_date": a.due_date.isoformat() if a.due_date else None,
         "one_time_only": a.one_time_only,
         "decks": decks_info,
-        "modes": [am.mode for am in a.modes],
-        "students": students
+        "modes": [am.mode for am in a.modes]
     })
 
 @bp.route('/assignments/<int:assignment_id>', methods=['DELETE'])
@@ -364,6 +355,7 @@ def submit_assignment_result(assignment_id):
 
     assignment = Assignment.query.get_or_404(assignment_id)
 
+    # Check if one_time_only and user has already submitted for this assignment and deck
     if assignment.one_time_only:
         existing_result = AssignmentResult.query.filter_by(
             assignment_id=assignment_id,
@@ -423,76 +415,3 @@ def get_student_assignment_results(assignment_id, user_id):
             "completed_at": r.completed_at.isoformat() if r.completed_at else None
         })
     return jsonify(output)
-
-@bp.route('/assignments/<int:assignment_id>/group-status', methods=['GET'])
-def get_assignment_group_status(assignment_id):
-    """Get assignment status for all group members"""
-    a = Assignment.query.get_or_404(assignment_id)
-    group = StudyGroup.query.get_or_404(a.group_id)
-    
-    # Get all group members
-    memberships = StudyGroupMembership.query.filter_by(group_id=a.group_id).all()
-    group_members = []
-    for m in memberships:
-        user = User.query.get(m.user_id)
-        if user:
-            group_members.append({
-                'id': user.id,
-                'username': user.username,
-                'name': user.name if hasattr(user, 'name') else None,
-                'email': user.email
-            })
-    
-    # Get all results for this assignment
-    results = AssignmentResult.query.filter_by(assignment_id=assignment_id).all()
-    user_results = {}
-    for r in results:
-        if r.user_id not in user_results:
-            user_results[r.user_id] = []
-        
-        deck_name = None
-        if r.deck_id:
-            deck = Deck.query.get(r.deck_id)
-            if deck:
-                deck_name = deck.name
-        
-        user_results[r.user_id].append({
-            'deck_id': r.deck_id,
-            'deck_name': deck_name,
-            'mode': r.mode,
-            'score': r.score,
-            'total': r.total,
-            'completed_at': r.completed_at.isoformat() if r.completed_at else None,
-            'passed': (r.score / r.total * 100) >= 50 if r.total > 0 else False
-        })
-    
-    # Build status for each group member
-    status_data = {
-        'group_id': a.group_id,
-        'assignment_id': assignment_id,
-        'group_members': group_members,
-        'not_taken': [],
-        'not_passed': [],
-        'passed': []
-    }
-    
-    for member in group_members:
-        if member['id'] not in user_results:
-            # Student hasn't taken the test
-            status_data['not_taken'].append(member)
-        else:
-            # Student has taken the test, check if they passed
-            member_results = user_results[member['id']]
-            all_passed = all(r['passed'] for r in member_results)
-            if all_passed:
-                status_data['passed'].append({
-                    'member': member,
-                    'results': member_results
-                })
-            else:
-                status_data['not_passed'].append({
-                    'member': member,
-                    'results': member_results
-                })
-    
-    return jsonify(status_data)
