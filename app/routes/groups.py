@@ -23,6 +23,151 @@ def list_groups():
         })
     return jsonify(result)
 
+'''@bp.route('/groups/<int:group_id>/dashboard', methods=['GET'])
+def get_group_dashboard(group_id):
+    group = StudyGroup.query.get_or_404(group_id)
+
+    # all assignments for this group
+    assignments = Assignment.query.filter_by(group_id=group_id).all()
+    assignment_ids = [a.id for a in assignments]
+
+    # all group members
+    memberships = StudyGroupMembership.query.filter_by(group_id=group_id).all()
+
+    dashboard = []
+
+    for membership in memberships:
+        user = User.query.get(membership.user_id)
+        if not user:
+            continue
+
+        # results only for this student's assignments in this group
+        if assignment_ids:
+            results = AssignmentResult.query.filter(
+                AssignmentResult.user_id == membership.user_id,
+                AssignmentResult.assignment_id.in_(assignment_ids)
+            ).all()
+        else:
+            results = []
+
+        # group results by assignment
+        by_assignment = {}
+        for r in results:
+            by_assignment.setdefault(r.assignment_id, []).append(r)
+
+        assignment_results = []
+        score_values = []
+        last_activity = None
+
+        for assignment_id, res_list in by_assignment.items():
+            scores_pct = []
+            latest_completed = None
+
+            for r in res_list:
+                if r.total and r.total > 0:
+                    pct = (r.score / r.total) * 100
+                    scores_pct.append(pct)
+                    score_values.append(pct)
+
+                if r.completed_at and (latest_completed is None or r.completed_at > latest_completed):
+                    latest_completed = r.completed_at
+
+                if r.completed_at and (last_activity is None or r.completed_at > last_activity):
+                    last_activity = r.completed_at
+
+            assignment_results.append({
+                "assignment_id": assignment_id,
+                "avg_score": sum(scores_pct)if scores_pct else 0,
+                "attempts": len(res_list),
+                "completed_at": latest_completed.isoformat() if latest_completed else None
+            })
+
+        dashboard.append({
+            "user_id": user.id,
+            "username": user.username,
+            "assignments_done": len(by_assignment),  # how many assignments student attempted
+            "avg_score": sum(score_values) if score_values else 0,
+            "last_activity": last_activity.isoformat() if last_activity else None,
+            "assignment_results": assignment_results
+        })
+
+    return jsonify(dashboard), 200'''
+
+@bp.route('/groups/<int:group_id>/dashboard', methods=['GET'])
+def get_group_dashboard(group_id):
+    group = StudyGroup.query.get_or_404(group_id)
+
+    assignments = Assignment.query.filter_by(group_id=group_id).all()
+    assignment_ids = [a.id for a in assignments]
+
+    memberships = StudyGroupMembership.query.filter_by(group_id=group_id).all()
+
+    dashboard = []
+
+    for membership in memberships:
+        user = User.query.get(membership.user_id)
+        if not user:
+            continue
+
+        if assignment_ids:
+            results = AssignmentResult.query.filter(
+                AssignmentResult.user_id == membership.user_id,
+                AssignmentResult.assignment_id.in_(assignment_ids)
+            ).all()
+        else:
+            results = []
+
+        by_assignment = {}
+        for r in results:
+            by_assignment.setdefault(r.assignment_id, []).append(r)
+
+        assignment_results = []
+        percent_values = []
+        last_activity = None
+
+        for assignment in assignments:
+            res_list = by_assignment.get(assignment.id, [])
+
+            earned_score = sum((r.score or 0) for r in res_list)
+            possible_score = sum((r.total or 0) for r in res_list)
+
+            avg_score = 0
+            if possible_score > 0:
+                avg_score = round((earned_score / possible_score) * 100, 2)
+                percent_values.append(avg_score)
+
+            latest_completed = None
+            for r in res_list:
+                if r.completed_at and (latest_completed is None or r.completed_at > latest_completed):
+                    latest_completed = r.completed_at
+                if r.completed_at and (last_activity is None or r.completed_at > last_activity):
+                    last_activity = r.completed_at
+
+            assignment_results.append({
+                "assignment_id": assignment.id,
+                "earned_score": earned_score,
+                "possible_score": possible_score,
+                "avg_score": avg_score,
+                "attempts": len(res_list),
+                "completed_at": latest_completed.isoformat() if latest_completed else None
+            })
+
+        assignments_done = sum(
+            1 for ar in assignment_results if ar["possible_score"] > 0
+        )
+
+        dashboard.append({
+            "user_id": user.id,
+            "username": user.username,
+            "assignments_done": assignments_done,
+            "avg_score": round(sum(percent_values) / len(percent_values), 2) if percent_values else 0,
+            "last_activity": last_activity.isoformat() if last_activity else None,
+            "assignment_results": assignment_results
+        })
+
+    return jsonify(dashboard), 200
+
+
 @bp.route('/groups', methods=['POST'])
 def create_group():
     data = request.get_json()
