@@ -12,7 +12,7 @@ def get_user_data(user_id):
         return jsonify({"message": "User not found"}), 404
 
     folders = Folder.query.filter_by(user_id=user_id).all()
-    decks = Deck.query.filter_by(user_id=user_id).all()
+    decks = Deck.query.filter_by(user_id=user_id).order_by(Deck.created_at.desc()).all()
 
     folder_list = [folder.to_dict() for folder in folders]
     deck_list = [
